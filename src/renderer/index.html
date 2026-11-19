@@ -92,6 +92,8 @@
             <button class="tab active" data-tab="general" type="button">General</button>
             <button class="tab" data-tab="providers" type="button">Providers</button>
             <button class="tab" data-tab="mcp" type="button">MCP</button>
+            <button class="tab" data-tab="autojb" type="button">Auto-JB</button>
+            <button class="tab" data-tab="maintenance" type="button">Maintenance</button>
             <button class="tab" data-tab="skills" type="button">Skills</button>
             <button class="tab" data-tab="tools" type="button">Tools</button>
             <button class="tab" data-tab="about" type="button">About</button>
@@ -181,6 +183,76 @@
                 <div class="hint" id="mcp-status">Restart the server after edits to load the new MCP set.</div>
               </form>
             </div>
+          </section>
+
+          <section class="panel" data-panel="autojb">
+            <div class="panel-head">
+              <h3>Auto-JB</h3>
+              <span class="badge" id="autojb-badge">unknown</span>
+            </div>
+            <p class="hint">
+              A standing brief applied to every session through <code>OPENCODE_CONFIG_CONTENT</code>. Your
+              <code>opencode.json</code> is not modified — the override exists only for the engine process this app
+              spawns.
+            </p>
+            <label class="field">
+              <span>Standing brief</span>
+              <select id="autojb-enabled">
+                <option value="on">Enabled</option>
+                <option value="off">Disabled</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Automatic compaction</span>
+              <select id="autojb-compaction">
+                <option value="off">Disabled — keep the full transcript</option>
+                <option value="on">Enabled — engine summarises long sessions</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Custom brief <em>(empty = shipped default)</em></span>
+              <textarea id="autojb-text" rows="10" spellcheck="false" placeholder="Leave empty to use resources/autojb-default.txt"></textarea>
+            </label>
+            <div class="field-row button-row">
+              <button id="autojb-save" class="btn btn-primary" type="button">Save and restart engine</button>
+              <button id="autojb-reset" class="btn btn-ghost" type="button">Clear custom text</button>
+            </div>
+            <p class="hint" id="autojb-status"></p>
+          </section>
+
+          <section class="panel" data-panel="maintenance">
+            <div class="panel-head">
+              <h3>Maintenance</h3>
+              <span class="badge" id="maintenance-badge">unknown</span>
+            </div>
+            <label class="field">
+              <span>Egress identity</span>
+              <select id="rotation-mode">
+                <option value="off">Direct — no proxy</option>
+                <option value="proxy">Custom HTTP proxy</option>
+                <option value="tor">Tor — bundled sidecar, HTTP tunnel 18118</option>
+                <option value="warp">WARP — local client on 127.0.0.1:40000</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Proxy URL <em>(only for the custom mode)</em></span>
+              <input id="rotation-proxy" type="text" placeholder="http://127.0.0.1:8080" spellcheck="false" />
+            </label>
+            <div class="field-row button-row">
+              <button id="rotation-save" class="btn btn-ghost" type="button">Save rotation</button>
+              <button id="reset-now" class="btn btn-primary" type="button">Reset now</button>
+              <button id="backup-now" class="btn btn-ghost" type="button">Backup now</button>
+            </div>
+            <p class="hint">
+              Reset = stop engine → snapshot the session database → rotate egress → start engine → probe.
+              The engine must be restarted for a proxy change to take effect, which is what Reset does.
+            </p>
+            <div class="panel-head">
+              <h3>Snapshots</h3>
+              <button id="refresh-backups" class="btn btn-ghost" type="button">Refresh</button>
+            </div>
+            <div id="backup-list" class="cards"></div>
+            <pre id="maintenance-log" class="log"></pre>
           </section>
 
           <section class="panel" data-panel="skills">

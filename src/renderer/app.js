@@ -911,6 +911,163 @@
     }
   }
 
+  /* ---------------- settings: auto-jb ---------------- */
+
+  async function loadAutojb() {
+    const status = $("#autojb-status");
+    try {
+      const meta = await bench.autojb.get();
+      $("autojb-enabled").value = meta.enabled ? "on" : "off";
+      $("autojb-compaction").value = meta.compactionAuto ? "on" : "off";
+      $("autojb-text").value = meta.customText || "";
+      $("autojb-badge").textContent = meta.enabled ? "active" : "off";
+      $("autojb-badge").className = `badge${meta.enabled ? " ok" : ""}`;
+      status.textContent = [
+        meta.usingCustomText ? "custom brief" : "shipped default",
+        `${meta.textLength} chars`,
+        meta.compactionAuto ? "auto compaction on" : "auto compaction off",
+        meta.instructionsFile,
+      ].join(" · ");
+    } catch (error) {
+      status.textContent = error.message || String(error);
+    }
+  }
+
+  async function saveAutojb() {
+    const status = $("autojb-status");
+    try {
+      status.textContent = "saving…";
+      await bench.autojb.save({
+        enabled: $("autojb-enabled").value === "on",
+        compactionAuto: $("autojb-compaction").value === "on",
+        customText: $("autojb-text").value,
+      });
+      await loadAutojb();
+      toast("saved — restarting engine", "ok");
+      await bench.server.restart();
+      status.textContent = `${status.textContent} — engine restarted`;
+    } catch (error) {
+      status.textContent = error.message || String(error);
+      toast(error.message || String(error), "error");
+    }
+  }
+
+  /* ---------------- settings: maintenance ---------------- */
+
+  function renderBackups(backups) {
+    const list = $("#backup-list");
+    list.innerHTML = "";
+    if (!backups.length) {
+      list.innerHTML = '<div class="sidebar-empty">no snapshots yet</div>';
+      return;
+    }
+    for (const entry of backups) {
+      const card = document.createElement("div");
+      card.className = "card";
+      const files = entry.manifest?.files?.length || 0;
+      card.innerHTML = `<div class="card-title"><span>${escapeHtml(entry.id)}</span><span class="badge">${escapeHtml(
+        entry.manifest?.reason || "snapshot",
+      )}</span></div><div class="card-sub">${files} files · ${shortNumber(entry.bytes)} bytes</div>`;
+      const actions = document.createElement("div");
+      actions.className = "card-actions";
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.className = "btn btn-ghost";
+      restore.textContent = "Restore";
+      restore.onclick = async () => {
+        if (!confirm(`Restore ${entry.id}? This overwrites the live session database and restarts the engine.`)) return;
+        restore.disabled = true;
+        restore.textContent = "restoring…";
+        try {
+          const result = await bench.maintenance.restore(entry.id);
+          toast(`restored ${result.id} (${result.written.length} files)`, "ok");
+          await loadMaintenance();
+        } catch (error) {
+          restore.disabled = false;
+          restore.textContent = "Restore";
+          toast(error.message || String(error), "error");
+        }
+      };
+      actions.appendChild(restore);
+      card.appendChild(actions);
+      list.appendChild(card);
+    }
+  }
+
+  function renderHistory(history) {
+    return history
+      .map((entry) => {
+        const stamp = new Date(entry.at).toLocaleTimeString();
+        return `${stamp}  ${entry.step.padEnd(8)} ${entry.status.padEnd(8)} ${entry.detail || ""}`;
+      })
+      .join("\n");
+  }
+
+  async function loadMaintenance() {
+    try {
+      const status = await bench.maintenance.status();
+      $("#rotation-mode").value = status.rotation.mode || "off";
+      $("#rotation-proxy").value = status.rotation.proxyUrl || "";
+      $("#rotation-proxy").disabled = status.rotation.mode !== "proxy";
+      $("#maintenance-badge").textContent =
+        status.rotation.mode === "off" ? "direct" : `${status.rotation.mode} · #${status.rotation.rotations}`;
+      renderBackups(status.backups || []);
+      $("#maintenance-log").textContent =
+        renderHistory(status.history || []) ||
+        `data:   ${status.dataDir}\nbackups: ${status.backupsDir} (keep ${status.keep})`;
+    } catch (error) {
+      $("#maintenance-log").textContent = error.message || String(error);
+    }
+  }
+
+  async function saveRotation() {
+    try {
+      const state = await bench.maintenance.rotation({
+        mode: $("#rotation-mode").value,
+        proxyUrl: $("#rotation-proxy").value.trim(),
+      });
+      toast(`rotation: ${state.mode}`, "ok");
+      await loadMaintenance();
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    }
+  }
+
+  async function runReset() {
+    const button = $("#reset-now");
+    button.disabled = true;
+    button.textContent = "resetting…";
+    try {
+      const report = await bench.maintenance.reset();
+      $("#maintenance-log").textContent = report.steps
+        .map((entry) => `${entry.step.padEnd(8)} ${entry.status.padEnd(8)} ${entry.detail || ""}`)
+        .join("\n");
+      toast(report.ok ? `reset complete in ${report.durationMs}ms` : `reset failed: ${report.error}`, report.ok ? "ok" : "error");
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    } finally {
+      button.disabled = false;
+      button.textContent = "Reset now";
+      await loadMaintenance();
+    }
+  }
+
+  async function runBackup() {
+    const button = $("#backup-now");
+    button.disabled = true;
+    button.textContent = "snapshotting…";
+    try {
+      const result = await bench.maintenance.backup();
+      toast(result.skipped ? result.reason : `snapshot ${result.id}`, result.skipped ? "error" : "ok");
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    } finally {
+      button.disabled = false;
+      button.textContent = "Backup now";
+      await loadMaintenance();
+    }
+  }
+
   /* ---------------- plumbing ---------------- */
 
   function applyTheme() {
@@ -922,6 +1079,8 @@
     $$(".panel").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tab));
     if (tab === "providers") loadProvidersPanel();
     if (tab === "mcp") loadMcpPanel();
+    if (tab === "autojb") loadAutojb();
+    if (tab === "maintenance") loadMaintenance();
     if (tab === "skills") loadSkills();
     if (tab === "tools") loadCatalog();
     if (tab === "about") fillAbout();
@@ -1034,8 +1193,21 @@
     });
 
     $("#refresh-skills").addEventListener("click", loadSkills);
+    $("#autojb-save").addEventListener("click", saveAutojb);
+    $("#autojb-reset").addEventListener("click", () => {
+      $("#autojb-text").value = "";
+      $("#autojb-status").textContent = "custom text cleared — save to apply the shipped default";
+    });
     $("#refresh-catalog").addEventListener("click", loadCatalog);
     $("#catalog-search").addEventListener("input", debounce(loadCatalog, 250));
+
+    $("#rotation-save").addEventListener("click", saveRotation);
+    $("#reset-now").addEventListener("click", runReset);
+    $("#backup-now").addEventListener("click", runBackup);
+    $("#refresh-backups").addEventListener("click", loadMaintenance);
+    $("#rotation-mode").addEventListener("change", (event) => {
+      $("#rotation-proxy").disabled = event.target.value !== "proxy";
+    });
 
     $("#open-config").addEventListener("click", () => {
       if (state.info) bench.shell.reveal(state.info.configFile);

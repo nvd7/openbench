@@ -17,9 +17,12 @@ copiado do ASAR: os módulos foram reescritos a partir do comportamento observad
 | Catálogo de ferramentas + clone | ✅ | `resources/catalog.json` curado, `git clone --depth 1` |
 | Temas | ✅ 3 | Sombra, Graphite, Paper (Sombra = tema escuro padrão) |
 | Painel de diagnóstico | ✅ | About mostra versões, paths, config |
-| Backup automático | ❌ | fora de escopo — OpenCode já guarda o DB |
-| Tor/WARP rotation | ❌ | fora de escopo; use proxy do sistema |
-| Auto-JB | ❌ | decisão: system prompt do usuário, não do app |
+| Backup automático | ✅ | `backup.cjs` — db+wal+shm, SHA-256, gzip, retenção 5 |
+| Tor/WARP rotation | ✅ | `netrotate.cjs` + `tor.cjs` — off / proxy / tor / warp |
+| Auto-JB | ✅ | `autojb.cjs` — brief por sessão via `OPENCODE_CONFIG_CONTENT` |
+| `compaction.auto = false` | ✅ | toggle no mesmo painel |
+| Reset coordenado | ✅ | `reset.cjs` — stop → snapshot → rotate → start → probe |
+| Perfis de instrução por projeto | ⚠️ | brief global editável; perfis por projeto pendentes |
 | Discord OAuth gate | ❌ | decisão: app local sem gate de terceiros |
 | Capri chat | ❌ | app separado no TokenCode |
 | Anime/cursor/tema animado | ❌ | assets proprietários |
@@ -28,13 +31,16 @@ copiado do ASAR: os módulos foram reescritos a partir do comportamento observad
 ## O que muda de propósito
 
 1. **Sem gate.** O app abre e funciona. Nenhum OAuth, nenhum guild, nenhum cache de licença.
-2. **Sem Auto-JB.** O system prompt é do usuário (AGENTS.md, skills, instruções do projeto), não injetado
-   por config. `compaction.auto` fica no padrão do OpenCode.
-3. **Sem Tor automático.** Rotação é infraestrutura, não feature de UI. Quem quer usa proxy no sistema.
+2. **Auto-JB é opcional e visível.** O brief injetado aparece na aba Auto-JB, é editável e pode ser desligado —
+   diferente do TokenCode, onde o texto vive num `.txt` de 96 KB dentro do pacote.
+3. **Rotação é escolha explícita.** Direct por padrão; Tor, WARP e proxy só entram quando você seleciona o modo
+   e roda um reset. Nada sobe `tor.exe` pelas costas.
 4. **Catálogo curado e menor.** 45 entradas com descrição, em vez de 200+ sem contexto. Mesmo mecanismo
    de clone, mesma pasta (`%APPDATA%\OpenBench\tools\repositories`).
 5. **Escrita de config com backup.** Toda edição de `opencode.json` cria `*.before-openbench-<ts>` antes
    de substituir atomicamente.
+6. **Snapshot antes de cada reset.** O TokenCode faz backup rotativo; aqui o snapshot é parte do ciclo de reset,
+   com SHA-256 por arquivo e restauração pela UI.
 
 ## O que foi mantido igual (porque é o que funciona)
 

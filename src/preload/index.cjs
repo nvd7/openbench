@@ -44,6 +44,17 @@ contextBridge.exposeInMainWorld("bench", {
   skills: {
     list: () => invoke("skills:list"),
   },
+  autojb: {
+    get: () => invoke("autojb:get"),
+    save: (partial) => invoke("autojb:save", partial),
+  },
+  maintenance: {
+    status: () => invoke("maintenance:status"),
+    rotation: (partial) => invoke("maintenance:rotation", partial),
+    backup: () => invoke("maintenance:backup"),
+    restore: (id) => invoke("maintenance:restore", id),
+    reset: () => invoke("maintenance:reset"),
+  },
   catalog: {
     list: (query) => invoke("catalog:list", query),
     clone: (id) => invoke("catalog:clone", id),

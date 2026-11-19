@@ -36,6 +36,10 @@ class BenchServer extends EventEmitter {
     this.userData = userData;
     this.cwd = cwd;
     this.portOverride = 0;
+    // Merged config applied over the user's opencode.json at spawn; null means "use the file as is".
+    this.configContent = null;
+    // HTTP proxy handed to the engine at spawn, or null for a direct connection.
+    this.proxy = null;
     this.proc = null;
     this.baseUrl = null;
     this.serviceFile = null;
@@ -145,7 +149,21 @@ class BenchServer extends EventEmitter {
     const port = this.portOverride > 0 ? this.portOverride : await freePort();
     this.baseUrl = `http://127.0.0.1:${port}`;
     const env = { ...process.env };
+    // Set by the main process before start(): merged config that the engine applies
+    // over opencode.json without touching the user's file.
     delete env.OPENCODE_CONFIG_CONTENT;
+    if (this.configContent) env.OPENCODE_CONFIG_CONTENT = JSON.stringify(this.configContent);
+
+    // Egress identity. The engine's HTTP client honours the standard proxy variables,
+    // so rotation is applied by changing what the child process sees at spawn.
+    for (const key of ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]) {
+      delete env[key];
+    }
+    if (this.proxy) {
+      env.HTTP_PROXY = this.proxy;
+      env.HTTPS_PROXY = this.proxy;
+      env.ALL_PROXY = this.proxy;
+    }
 
     const args = ["serve"];
     if (service) args.push("--service");

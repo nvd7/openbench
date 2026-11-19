@@ -18,6 +18,12 @@ affiliated with TokenCode, its authors, or the OpenCode project.
 - **Skills browser.** Lists `SKILL.md` packages from the standard OpenCode/agents folders.
 - **Tool catalog.** Curated GitHub links with shallow clone into the user data folder. Cloning never installs or
   executes anything.
+- **Auto-JB.** A standing brief injected into every session through `OPENCODE_CONFIG_CONTENT`, with the engine's
+  automatic compaction switched off. Your `opencode.json` is never modified; the override lives only for the engine
+  process this app spawns. Editable in Settings → Auto-JB, or by editing the generated file directly.
+- **Maintenance / reset.** Egress rotation (direct, custom HTTP proxy, bundled Tor with circuit reset, or a local
+  WARP client), SQLite session snapshots with SHA-256 manifests and 5-deep retention, and a one-click reset that
+  stops the engine, snapshots, rotates, restarts and probes.
 - **Three themes.** Sombra (default), Graphite, Paper.
 
 ## Requirements

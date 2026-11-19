@@ -8,6 +8,11 @@ const catalog = require("./catalog.cjs");
 const skills = require("./skills.cjs");
 const providers = require("./providers.cjs");
 const mcp = require("./mcp.cjs");
+const configStore = require("./config.cjs");
+const autojb = require("./autojb.cjs");
+const netrotate = require("./netrotate.cjs");
+const backup = require("./backup.cjs");
+const reset = require("./reset.cjs");
 
 const appRoot = app.getAppPath();
 const resourcesRoot = app.isPackaged ? path.join(process.resourcesPath, "resources") : path.join(appRoot, "resources");
@@ -69,6 +74,19 @@ function registerIpc() {
   const startServer = async () => {
     server.portOverride = settings.port;
     server.cwd = settings.directory || undefined;
+    server.configContent = autojb.buildConfigContent({
+      userData,
+      resourcesRoot,
+      base: configStore.read(),
+    });
+    // A proxy that fails to resolve must not brick the app: fall back to direct.
+    try {
+      const resolved = await netrotate.resolveProxy({ userData, settings });
+      server.proxy = resolved.proxy;
+    } catch (error) {
+      server.proxy = null;
+      netrotate.save(userData, { lastError: error.message });
+    }
     return server.start();
   };
 
@@ -122,6 +140,34 @@ function registerIpc() {
   ipcMain.handle("mcp:remove", (_event, name) => mcp.remove(name));
 
   ipcMain.handle("skills:list", () => skills.list(settings.lastDirectory || null));
+
+  // Auto-JB: standing brief injected per spawn, plus compaction control.
+  ipcMain.handle("autojb:get", () => autojb.meta(userData, resourcesRoot));
+  ipcMain.handle("autojb:save", (_event, partial) => {
+    autojb.save(userData, partial || {});
+    return autojb.meta(userData, resourcesRoot);
+  });
+
+  // Maintenance: egress rotation, database snapshots, reset coordinator.
+  ipcMain.handle("maintenance:status", () => ({
+    rotation: netrotate.load(userData),
+    backups: backup.list(userData),
+    history: reset.history(),
+    dataDir: backup.dataDir(),
+    backupsDir: backup.backupsDir(userData),
+    keep: backup.KEEP_BACKUPS,
+  }));
+  ipcMain.handle("maintenance:rotation", (_event, partial) => netrotate.save(userData, partial || {}));
+  ipcMain.handle("maintenance:backup", () => backup.snapshot(userData, { reason: "manual" }));
+  ipcMain.handle("maintenance:restore", async (_event, id) => {
+    await server.stop();
+    const result = await backup.restore(userData, id);
+    await startServer();
+    return result;
+  });
+  ipcMain.handle("maintenance:reset", () =>
+    reset.run({ server, userData, settings, start: startServer }),
+  );
 
   ipcMain.handle("catalog:list", (_event, query) => catalog.list(userData, resourcesRoot, query));
   ipcMain.handle("catalog:clone", (_event, id) => catalog.clone(userData, resourcesRoot, id));
