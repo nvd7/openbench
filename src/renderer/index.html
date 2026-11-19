@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en" data-theme="sombra">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'; connect-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenBench</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <span class="brand-name">OPEN<span>BENCH</span></span>
+          <span class="brand-tag">desktop workbench</span>
+        </div>
+        <div class="topbar-center">
+          <button id="model-button" class="pill" type="button" title="Active model">loading providers…</button>
+          <span id="server-pill" class="pill status-pill" data-state="stopped">offline</span>
+        </div>
+        <div class="topbar-actions">
+          <button id="new-session" class="btn btn-ghost" type="button">New session</button>
+          <button id="open-settings" class="btn btn-icon" type="button" title="Settings">⚙</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <div class="sidebar-head">
+            <span>Sessions</span>
+            <input id="session-search" type="search" placeholder="filter…" spellcheck="false" />
+          </div>
+          <div id="session-list" class="session-list"></div>
+          <div class="sidebar-foot">
+            <button id="project-button" class="project-button" type="button" title="Choose project folder">
+              <span class="project-dot"></span>
+              <span id="project-label">no project folder</span>
+            </button>
+          </div>
+        </aside>
+
+        <main class="chat">
+          <div id="chat-head" class="chat-head">
+            <div class="chat-title">
+              <h1 id="session-title">Start a session</h1>
+              <span id="session-meta" class="session-meta"></span>
+            </div>
+            <div class="chat-actions">
+              <button id="refresh-button" class="btn btn-ghost" type="button">Refresh</button>
+            </div>
+          </div>
+
+          <div id="messages" class="messages">
+            <section class="empty-state" id="empty-state">
+              <div class="empty-mark"></div>
+              <h2>Ask anything, ship everything</h2>
+              <p>Sessions run through the local OpenCode server. Pick a model above, then describe the work.</p>
+              <div class="suggestions">
+                <button type="button" data-suggestion="Map this repository and list the riskiest files.">Map this repository</button>
+                <button type="button" data-suggestion="Write a failing test for the last bug I described.">Write a failing test</button>
+                <button type="button" data-suggestion="Review git diff and list concrete defects.">Review the diff</button>
+              </div>
+            </section>
+          </div>
+
+          <footer class="composer-wrap">
+            <form id="composer" class="composer">
+              <textarea id="prompt" rows="1" placeholder="Describe the task. Enter sends, Shift+Enter adds a line." spellcheck="false"></textarea>
+              <div class="composer-actions">
+                <span id="composer-hint" class="composer-hint">ready</span>
+                <button id="stop-button" class="btn btn-danger" type="button" hidden>Stop</button>
+                <button id="send-button" class="btn btn-primary" type="submit">Send</button>
+              </div>
+            </form>
+          </footer>
+        </main>
+      </div>
+    </div>
+
+    <div id="settings-overlay" class="overlay" hidden>
+      <div class="modal">
+        <header class="modal-head">
+          <h2>Settings</h2>
+          <button id="close-settings" class="btn btn-icon" type="button">✕</button>
+        </header>
+        <div class="modal-body">
+          <nav class="tabs" id="settings-tabs">
+            <button class="tab active" data-tab="general" type="button">General</button>
+            <button class="tab" data-tab="providers" type="button">Providers</button>
+            <button class="tab" data-tab="mcp" type="button">MCP</button>
+            <button class="tab" data-tab="skills" type="button">Skills</button>
+            <button class="tab" data-tab="tools" type="button">Tools</button>
+            <button class="tab" data-tab="about" type="button">About</button>
+          </nav>
+
+          <section class="panel active" data-panel="general">
+            <label class="field">
+              <span>Theme</span>
+              <select id="setting-theme">
+                <option value="sombra">Sombra</option>
+                <option value="graphite">Graphite</option>
+                <option value="paper">Paper</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>OpenCode CLI path</span>
+              <div class="field-row">
+                <input id="setting-cli" type="text" placeholder="auto: bundled, PATH or opencode-ai" spellcheck="false" />
+                <button id="browse-cli" class="btn btn-ghost" type="button">Browse</button>
+              </div>
+            </label>
+            <label class="field">
+              <span>Server port <em>(0 = pick a free port)</em></span>
+              <input id="setting-port" type="number" min="0" max="65535" step="1" />
+            </label>
+            <label class="field">
+              <span>Project folder</span>
+              <div class="field-row">
+                <input id="setting-directory" type="text" placeholder="defaults to the launched directory" spellcheck="false" />
+                <button id="browse-directory" class="btn btn-ghost" type="button">Browse</button>
+              </div>
+            </label>
+            <div class="field-row button-row">
+              <button id="save-general" class="btn btn-primary" type="button">Save and restart server</button>
+              <button id="restart-server" class="btn btn-ghost" type="button">Restart server</button>
+            </div>
+            <p class="hint">Provider and MCP edits are written to the global <code>opencode.json</code>. The server is restarted to pick them up.</p>
+          </section>
+
+          <section class="panel" data-panel="providers">
+            <div class="split">
+              <div class="list" id="provider-list"></div>
+              <form class="form" id="provider-form">
+                <h3>Custom provider</h3>
+                <label class="field"><span>ID</span><input name="id" type="text" placeholder="my-provider" spellcheck="false" required /></label>
+                <label class="field"><span>Display name</span><input name="name" type="text" placeholder="My Provider" required /></label>
+                <label class="field">
+                  <span>Protocol</span>
+                  <select name="protocol">
+                    <option value="openai-chat">OpenAI-compatible chat</option>
+                    <option value="openai-responses">OpenAI Responses</option>
+                    <option value="anthropic">Anthropic messages</option>
+                    <option value="gemini">Gemini</option>
+                  </select>
+                </label>
+                <label class="field"><span>Base URL</span><input name="baseURL" type="url" placeholder="https://api.example.com/v1" required /></label>
+                <label class="field"><span>API key <em>(stored in opencode.json)</em></span><input name="apiKey" type="password" placeholder="leave blank to keep current" /></label>
+                <label class="field"><span>Models <em>(one per line)</em></span><textarea name="models" rows="4" spellcheck="false"></textarea></label>
+                <div class="field-row button-row">
+                  <button class="btn btn-primary" type="submit">Save provider</button>
+                  <button id="provider-reset" class="btn btn-ghost" type="button">New</button>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="mcp">
+            <div class="split">
+              <div class="list" id="mcp-list"></div>
+              <form class="form" id="mcp-form">
+                <h3>MCP server</h3>
+                <label class="field"><span>Name</span><input name="name" type="text" placeholder="filesystem" spellcheck="false" required /></label>
+                <label class="field">
+                  <span>Type</span>
+                  <select name="type">
+                    <option value="local">local (stdio)</option>
+                    <option value="remote">remote (HTTP)</option>
+                  </select>
+                </label>
+                <label class="field" data-kind="local"><span>Command</span><textarea name="command" rows="2" placeholder="npx -y @modelcontextprotocol/server-filesystem" spellcheck="false"></textarea></label>
+                <label class="field" data-kind="remote" hidden><span>URL</span><input name="url" type="url" placeholder="https://mcp.example.com/mcp" /></label>
+                <label class="field"><span>Enabled</span><input name="enabled" type="checkbox" checked /></label>
+                <div class="field-row button-row">
+                  <button class="btn btn-primary" type="submit">Save server</button>
+                  <button id="mcp-reset" class="btn btn-ghost" type="button">New</button>
+                </div>
+                <div class="hint" id="mcp-status">Restart the server after edits to load the new MCP set.</div>
+              </form>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="skills">
+            <div class="panel-head">
+              <h3>Installed skills</h3>
+              <button id="refresh-skills" class="btn btn-ghost" type="button">Refresh</button>
+            </div>
+            <div id="skill-list" class="cards"></div>
+          </section>
+
+          <section class="panel" data-panel="tools">
+            <div class="panel-head">
+              <h3>Tool catalog</h3>
+              <div class="field-row">
+                <input id="catalog-search" type="search" placeholder="search tools…" spellcheck="false" />
+                <button id="refresh-catalog" class="btn btn-ghost" type="button">Refresh</button>
+              </div>
+            </div>
+            <div id="catalog-list" class="cards compact"></div>
+          </section>
+
+          <section class="panel" data-panel="about">
+            <h3>OpenBench</h3>
+            <p class="about-copy">An independent, MIT-licensed desktop shell around the OpenCode coding agent. Not affiliated with TokenCode or the OpenCode project.</p>
+            <dl class="info-grid" id="about-info"></dl>
+            <div class="field-row button-row">
+              <button id="open-config" class="btn btn-ghost" type="button">Reveal opencode.json</button>
+              <button id="open-docs" class="btn btn-ghost" type="button">OpenCode docs</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="model-overlay" class="overlay" hidden>
+      <div class="modal modal-small">
+        <header class="modal-head">
+          <h2>Model</h2>
+          <button id="close-models" class="btn btn-icon" type="button">✕</button>
+        </header>
+        <div class="modal-body">
+          <input id="model-search" type="search" placeholder="filter models…" spellcheck="false" />
+          <div id="model-list" class="model-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-stack" class="toast-stack"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

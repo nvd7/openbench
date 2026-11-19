@@ -1,0 +1,43 @@
+{
+  "name": "openbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenBench — a desktop workbench for the OpenCode coding agent: chat, providers, MCP, skills and tool catalog.",
+  "license": "MIT",
+  "author": "nvd7",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "dev": "node scripts/dev.mjs",
+    "dist": "npm run build && electron-builder --win portable",
+    "dist:dir": "npm run build && electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.2"
+  },
+  "build": {
+    "appId": "dev.openbench.desktop",
+    "productName": "OpenBench",
+    "files": [
+      "dist/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
+    ],
+    "win": {
+      "target": "portable"
+    }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true,
+    "esbuild@0.24.2": true
+  }
+}
