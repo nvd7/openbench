@@ -952,6 +952,213 @@
     }
   }
 
+  /* ---------------- settings: instruction profiles ---------------- */
+
+  let profilesCache = null;
+
+  function profileTarget() {
+    const scope = $("#profiles-scope").value;
+    const value = $("#profiles-target").value.trim();
+    if (scope === "project") return { directory: value };
+    if (scope === "session") return { sessionID: value };
+    return {};
+  }
+
+  function renderProfiles(info) {
+    profilesCache = info;
+    const select = $("#profiles-select");
+    const keep = select.value;
+    select.innerHTML = '<option value="">new profile...</option>';
+    for (const profile of info.profiles) {
+      const option = document.createElement("option");
+      option.value = profile.id;
+      option.textContent = `${profile.name} (${profile.length.toLocaleString()} chars)`;
+      select.appendChild(option);
+    }
+    if (keep) select.value = keep;
+
+    const lines = [];
+    lines.push(`file:      ${info.file}`);
+    lines.push(`profiles:  ${info.profiles.length}/${info.limits.profiles}`);
+    lines.push(`default:   ${info.defaultID || "(none)"}`);
+    for (const [dir, id] of Object.entries(info.projects)) {
+      const name = info.profiles.find((p) => p.id === id)?.name || id;
+      lines.push(`project:   ${dir} -> ${name}`);
+    }
+    for (const [session, id] of Object.entries(info.sessions)) {
+      const name = info.profiles.find((p) => p.id === id)?.name || id;
+      lines.push(`session:   ${session} -> ${name}`);
+    }
+    $("#profiles-info").textContent = lines.join("\n");
+    const badge = $("#profiles-badge");
+    badge.textContent = info.profiles.length ? `${info.profiles.length} saved` : "empty";
+    badge.className = `badge${info.profiles.length ? " ok" : ""}`;
+  }
+
+  async function loadProfiles() {
+    try {
+      renderProfiles(await bench.profiles.summary());
+    } catch (error) {
+      $("#profiles-info").textContent = error.message || String(error);
+    }
+  }
+
+  function selectProfile() {
+    const id = $("#profiles-select").value;
+    const profile = profilesCache?.profiles?.find((entry) => entry.id === id);
+    $("#profiles-name").value = profile?.name || "";
+    $("#profiles-content").value = "";
+    if (id) {
+      bench.profiles
+        .read(id)
+        .then((value) => {
+          $("#profiles-content").value = value?.content || "";
+        })
+        .catch(() => {});
+    }
+  }
+
+  async function saveProfile() {
+    try {
+      const saved = await bench.profiles.save({
+        id: $("#profiles-select").value || undefined,
+        name: $("#profiles-name").value,
+        content: $("#profiles-content").value,
+      });
+      toast("profile saved", "ok");
+      await loadProfiles();
+      $("#profiles-select").value = saved.id;
+      selectProfile();
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    }
+  }
+
+  async function deleteProfile() {
+    const id = $("#profiles-select").value;
+    if (!id) return;
+    if (!confirm("Delete this profile and every binding to it?")) return;
+    try {
+      await bench.profiles.remove(id);
+      $("#profiles-select").value = "";
+      $("#profiles-name").value = "";
+      $("#profiles-content").value = "";
+      await loadProfiles();
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    }
+  }
+
+  async function bindProfile(unbind) {
+    const id = $("#profiles-select").value;
+    if (!unbind && !id) {
+      toast("pick a profile first", "error");
+      return;
+    }
+    try {
+      await bench.profiles.bind({ id: unbind ? "" : id, scope: profileTarget() });
+      toast(unbind ? "binding removed" : "profile bound", "ok");
+      await loadProfiles();
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    }
+  }
+
+  async function pickProfileScope() {
+    const directory = await bench.dialog.directory();
+    if (!directory) return;
+    $("#profiles-scope").value = "project";
+    $("#profiles-target").value = directory;
+  }
+
+  /* ---------------- settings: context policy ---------------- */
+
+  function fillPolicyOptions() {
+    const threshold = $("#context-threshold");
+    const windowSelect = $("#context-window");
+    if (threshold.options.length) return;
+    for (const value of [25, 50, 65, 75, 80, 95]) {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = `${value}%`;
+      threshold.appendChild(option);
+    }
+    for (const value of [25, 50, 75, 100]) {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = `${value}%`;
+      windowSelect.appendChild(option);
+    }
+  }
+
+  function renderPolicies(info) {
+    fillPolicyOptions();
+    const lines = [`file: ${info.file}`];
+    lines.push(`defaults: auto=${info.defaults.auto} threshold=${info.defaults.threshold}% window=${info.defaults.window}%`);
+    const entries = Object.entries(info.sessions || {});
+    if (!entries.length) lines.push("sessions: (none - defaults apply)");
+    for (const [session, policy] of entries) {
+      lines.push(`${session}: auto=${policy.auto} threshold=${policy.threshold}% window=${policy.window}%`);
+    }
+    $("#context-info").textContent = lines.join("\n");
+    const badge = $("#context-badge");
+    badge.textContent = `${entries.length} session${entries.length === 1 ? "" : "s"}`;
+    badge.className = `badge${entries.length ? " ok" : ""}`;
+  }
+
+  async function loadContextPolicy() {
+    try {
+      renderPolicies(await bench.policy.summary());
+    } catch (error) {
+      $("#context-info").textContent = error.message || String(error);
+    }
+  }
+
+  async function loadSessionPolicy() {
+    fillPolicyOptions();
+    const sessionID = $("#context-session").value.trim();
+    try {
+      const policy = await bench.policy.read(sessionID);
+      $("#context-auto").value = policy.auto ? "on" : "off";
+      $("#context-threshold").value = String(policy.threshold);
+      $("#context-window").value = String(policy.window);
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    }
+  }
+
+  async function saveSessionPolicy() {
+    const sessionID = $("#context-session").value.trim();
+    if (!sessionID) {
+      toast("enter a session id", "error");
+      return;
+    }
+    try {
+      await bench.policy.write({
+        sessionID,
+        auto: $("#context-auto").value === "on",
+        threshold: Number($("#context-threshold").value),
+        window: Number($("#context-window").value),
+      });
+      toast("policy saved", "ok");
+      await loadContextPolicy();
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    }
+  }
+
+  async function clearSessionPolicy() {
+    const sessionID = $("#context-session").value.trim();
+    if (!sessionID) return;
+    try {
+      await bench.policy.clear(sessionID);
+      toast("session reset to defaults", "ok");
+      await loadContextPolicy();
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    }
+  }
+
   /* ---------------- settings: maintenance ---------------- */
 
   function renderBackups(backups) {
@@ -1068,6 +1275,68 @@
     }
   }
 
+  /* ---------------- settings: merge ---------------- */
+
+  async function loadMerge() {
+    const badge = $("#merge-badge");
+    const info = $("#merge-info");
+    try {
+      const status = await bench.merge.status();
+      badge.textContent = status.installed ? "installed" : "not installed";
+      badge.className = `badge${status.installed ? " ok" : ""}`;
+      info.textContent = [
+        `config:   ${status.configFile}`,
+        `plugin:   ${status.pluginFile}`,
+        `layer:    ${status.layerHome}`,
+        `state:    ${status.stateFile}`,
+        `engine:   ${status.engineVersion || "not detected"}`,
+        `compaction.auto: ${status.compactionAuto === undefined ? "(unset)" : status.compactionAuto}`,
+        status.configError ? `config error: ${status.configError}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      $("#merge-install").disabled = status.installed;
+      $("#merge-uninstall").disabled = !status.installed;
+    } catch (error) {
+      badge.textContent = "error";
+      badge.className = "badge";
+      info.textContent = error.message || String(error);
+    }
+  }
+
+  async function installMerge() {
+    const install = $("#merge-install");
+    install.disabled = true;
+    install.textContent = "installing...";
+    try {
+      await bench.merge.install();
+      toast("layer installed - restart OpenCode to apply", "ok");
+      await bench.server.restart();
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    } finally {
+      install.textContent = "Install layer";
+      await loadMerge();
+    }
+  }
+
+  async function uninstallMerge() {
+    if (!confirm("Remove the layer from the global opencode.json? The previous compaction.auto value is restored.")) return;
+    const remove = $("#merge-uninstall");
+    remove.disabled = true;
+    remove.textContent = "removing...";
+    try {
+      await bench.merge.uninstall();
+      toast("layer removed", "ok");
+      await bench.server.restart();
+    } catch (error) {
+      toast(error.message || String(error), "error");
+    } finally {
+      remove.textContent = "Remove layer";
+      await loadMerge();
+    }
+  }
+
   /* ---------------- plumbing ---------------- */
 
   function applyTheme() {
@@ -1080,6 +1349,9 @@
     if (tab === "providers") loadProvidersPanel();
     if (tab === "mcp") loadMcpPanel();
     if (tab === "autojb") loadAutojb();
+    if (tab === "profiles") loadProfiles();
+    if (tab === "context") loadContextPolicy();
+    if (tab === "merge") loadMerge();
     if (tab === "maintenance") loadMaintenance();
     if (tab === "skills") loadSkills();
     if (tab === "tools") loadCatalog();
@@ -1202,6 +1474,24 @@
     $("#catalog-search").addEventListener("input", debounce(loadCatalog, 250));
 
     $("#rotation-save").addEventListener("click", saveRotation);
+    $("#profiles-select").addEventListener("change", selectProfile);
+    $("#profiles-save").addEventListener("click", saveProfile);
+    $("#profiles-new").addEventListener("click", () => {
+      $("#profiles-select").value = "";
+      $("#profiles-name").value = "";
+      $("#profiles-content").value = "";
+    });
+    $("#profiles-delete").addEventListener("click", deleteProfile);
+    $("#profiles-bind").addEventListener("click", () => bindProfile(false));
+    $("#profiles-unbind").addEventListener("click", () => bindProfile(true));
+    $("#profiles-pick").addEventListener("click", pickProfileScope);
+    $("#profiles-refresh").addEventListener("click", loadProfiles);
+    $("#context-save").addEventListener("click", saveSessionPolicy);
+    $("#context-clear").addEventListener("click", clearSessionPolicy);
+    $("#context-load").addEventListener("click", loadSessionPolicy);
+    $("#merge-install").addEventListener("click", installMerge);
+    $("#merge-uninstall").addEventListener("click", uninstallMerge);
+    $("#merge-refresh").addEventListener("click", loadMerge);
     $("#reset-now").addEventListener("click", runReset);
     $("#backup-now").addEventListener("click", runBackup);
     $("#refresh-backups").addEventListener("click", loadMaintenance);

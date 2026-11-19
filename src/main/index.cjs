@@ -10,6 +10,10 @@ const providers = require("./providers.cjs");
 const mcp = require("./mcp.cjs");
 const configStore = require("./config.cjs");
 const autojb = require("./autojb.cjs");
+const layer = require("./layer.cjs");
+const merge = require("./merge.cjs");
+const profiles = require("./profiles.cjs");
+const contextpolicy = require("./contextpolicy.cjs");
 const netrotate = require("./netrotate.cjs");
 const backup = require("./backup.cjs");
 const reset = require("./reset.cjs");
@@ -74,8 +78,10 @@ function registerIpc() {
   const startServer = async () => {
     server.portOverride = settings.port;
     server.cwd = settings.directory || undefined;
+    // The layer must be seeded before the config references it; ensureEngine is cheap
+    // after the first run and refreshes files when the app is updated.
+    layer.ensureState(resourcesRoot, {});
     server.configContent = autojb.buildConfigContent({
-      userData,
       resourcesRoot,
       base: configStore.read(),
     });
@@ -141,12 +147,36 @@ function registerIpc() {
 
   ipcMain.handle("skills:list", () => skills.list(settings.lastDirectory || null));
 
-  // Auto-JB: standing brief injected per spawn, plus compaction control.
-  ipcMain.handle("autojb:get", () => autojb.meta(userData, resourcesRoot));
+  // Auto-JB: standing brief injected per request by the engine layer, plus compaction control.
+  ipcMain.handle("autojb:get", () => autojb.meta(resourcesRoot));
   ipcMain.handle("autojb:save", (_event, partial) => {
-    autojb.save(userData, partial || {});
-    return autojb.meta(userData, resourcesRoot);
+    autojb.save(partial || {});
+    return autojb.meta(resourcesRoot);
   });
+
+  // Instruction profiles: named briefs bound to a session, a project or the default.
+  ipcMain.handle("profiles:summary", () => profiles.summary());
+  ipcMain.handle("profiles:read", (_event, id) => {
+    const value = profiles.read();
+    return value.profiles.find((entry) => entry.id === id) || null;
+  });
+  ipcMain.handle("profiles:save", (_event, value) => profiles.save(value || {}));
+  ipcMain.handle("profiles:remove", (_event, id) => profiles.remove(id));
+  ipcMain.handle("profiles:bind", (_event, value) => profiles.bind(value || {}));
+
+  // Per-session context policy: the thresholds the idle compactor reads.
+  ipcMain.handle("policy:summary", () => contextpolicy.summary());
+  ipcMain.handle("policy:read", (_event, sessionID) => contextpolicy.read(sessionID));
+  ipcMain.handle("policy:write", (_event, value) => {
+    const { sessionID, ...patch } = value || {};
+    return contextpolicy.write(sessionID, patch);
+  });
+  ipcMain.handle("policy:clear", (_event, sessionID) => contextpolicy.clear(sessionID));
+
+  // Merge: write the layer into the user's global opencode.json (installed desktop).
+  ipcMain.handle("merge:status", () => merge.status());
+  ipcMain.handle("merge:install", () => merge.install({ resourcesRoot }));
+  ipcMain.handle("merge:uninstall", () => merge.uninstall());
 
   // Maintenance: egress rotation, database snapshots, reset coordinator.
   ipcMain.handle("maintenance:status", () => ({

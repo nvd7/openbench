@@ -19,10 +19,13 @@ copiado do ASAR: os módulos foram reescritos a partir do comportamento observad
 | Painel de diagnóstico | ✅ | About mostra versões, paths, config |
 | Backup automático | ✅ | `backup.cjs` — db+wal+shm, SHA-256, gzip, retenção 5 |
 | Tor/WARP rotation | ✅ | `netrotate.cjs` + `tor.cjs` — off / proxy / tor / warp |
-| Auto-JB | ✅ | `autojb.cjs` — brief por sessão via `OPENCODE_CONFIG_CONTENT` |
-| `compaction.auto = false` | ✅ | toggle no mesmo painel |
-| Reset coordenado | ✅ | `reset.cjs` — stop → snapshot → rotate → start → probe |
-| Perfis de instrução por projeto | ⚠️ | brief global editável; perfis por projeto pendentes |
+| Auto-JB | OK | plugin de engine: brief aplicado por request, edicao vale no proximo turno |
+| `compaction.auto = false` | OK | plugin compacta no idle em 75% do budget do modelo |
+| Reset coordenado | OK | `reset.cjs` - stop > snapshot > rotate > start > probe |
+| Perfis de instrucao por projeto | OK | profiles.cjs + profiles.json: perfis nomeados, binding por sessao/projeto/default |
+
+| Context policy por sessao | OK | contextpolicy.cjs + context/sessions.json: auto/threshold/window |
+| Log de requests | OK | utojb/requests.jsonl com rotacao em 4 MB |
 | Discord OAuth gate | ❌ | decisão: app local sem gate de terceiros |
 | Capri chat | ❌ | app separado no TokenCode |
 | Anime/cursor/tema animado | ❌ | assets proprietários |

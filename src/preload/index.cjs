@@ -48,6 +48,24 @@ contextBridge.exposeInMainWorld("bench", {
     get: () => invoke("autojb:get"),
     save: (partial) => invoke("autojb:save", partial),
   },
+  profiles: {
+    summary: () => invoke("profiles:summary"),
+    read: (id) => invoke("profiles:read", id),
+    save: (value) => invoke("profiles:save", value),
+    remove: (id) => invoke("profiles:remove", id),
+    bind: (value) => invoke("profiles:bind", value),
+  },
+  policy: {
+    summary: () => invoke("policy:summary"),
+    read: (sessionID) => invoke("policy:read", sessionID),
+    write: (value) => invoke("policy:write", value),
+    clear: (sessionID) => invoke("policy:clear", sessionID),
+  },
+  merge: {
+    status: () => invoke("merge:status"),
+    install: () => invoke("merge:install"),
+    uninstall: () => invoke("merge:uninstall"),
+  },
   maintenance: {
     status: () => invoke("maintenance:status"),
     rotation: (partial) => invoke("maintenance:rotation", partial),

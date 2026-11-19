@@ -1,51 +1,53 @@
-// OpenBench — Auto-JB: instruction injection and compaction control.
+// OpenBench — Auto-JB state and engine override.
 //
-// The engine reads OPENCODE_CONFIG_CONTENT at spawn and merges it over the user's
-// global opencode.json. That gives the app two levers without touching the user's
-// file on disk:
+// The brief itself is applied by the engine layer (resources/engine/openbench-plugin.mjs),
+// not by `instructions`. That difference matters: `instructions` is read when the session
+// is created, so editing it has no effect until a new session; the plugin pushes the brief
+// into the system array on every request-building hook, so the next turn sees the change.
 //
-//   1. `instructions: [<file>]` — a standing system-level brief applied to every
-//      session. File lives in userData so the user can edit it in place.
-//   2. `compaction.auto: false` — long sessions keep their full transcript instead
-//      of being silently summarised. Costs context budget; that is the trade.
-//
-// Nothing here is applied unless the feature is enabled in settings.
+// This module owns three things:
+//   - the on-disk state the plugin reads (enabled, compactionAuto, customText)
+//   - the generated brief file the plugin falls back to
+//   - OPENCODE_CONFIG_CONTENT, which registers the plugin and switches the engine's own
+//     auto compaction off so the plugin can own the decision.
 const fs = require("node:fs");
 const path = require("node:path");
 const store = require("./store.cjs");
+const layer = require("./layer.cjs");
 
 const DEFAULTS = {
   enabled: true,
-  compactionAuto: false,
+  compactionAuto: true,
   customText: "",
 };
 
-function paths(userData) {
-  const dir = path.join(userData, "autojb");
+function paths() {
+  const dir = layer.autojbDir();
   return {
     dir,
     state: path.join(dir, "state.json"),
     instructions: path.join(dir, "instructions.md"),
+    profiles: path.join(dir, "profiles.json"),
   };
 }
 
-function load(userData) {
-  const state = { ...DEFAULTS, ...store.read(paths(userData).state, {}) };
+function load() {
+  const state = { ...DEFAULTS, ...store.read(paths().state, {}) };
   return {
-    enabled: Boolean(state.enabled),
-    compactionAuto: Boolean(state.compactionAuto),
+    enabled: state.enabled !== false,
+    compactionAuto: state.compactionAuto !== false,
     customText: typeof state.customText === "string" ? state.customText : "",
   };
 }
 
-function save(userData, partial) {
-  const next = { ...load(userData), ...(partial || {}) };
+function save(partial) {
+  const next = { ...load(), ...(partial || {}) };
   const clean = {
-    enabled: Boolean(next.enabled),
-    compactionAuto: Boolean(next.compactionAuto),
+    enabled: next.enabled !== false,
+    compactionAuto: next.compactionAuto !== false,
     customText: String(next.customText || ""),
   };
-  store.write(paths(userData).state, clean);
+  store.write(paths().state, clean);
   return clean;
 }
 
@@ -59,15 +61,17 @@ function defaultText(resourcesRoot) {
 }
 
 /** Effective brief: the user's text when set, otherwise the shipped default. */
-function text(userData, resourcesRoot) {
-  const state = load(userData);
+function text(resourcesRoot) {
+  const state = load();
   const custom = state.customText.trim();
   return custom || defaultText(resourcesRoot);
 }
 
-function meta(userData, resourcesRoot) {
-  const state = load(userData);
-  const effective = text(userData, resourcesRoot);
+function meta(resourcesRoot) {
+  const state = load();
+  const effective = text(resourcesRoot);
+  const target = paths();
+  const engine = layer.pluginEntry();
   return {
     enabled: state.enabled,
     compactionAuto: state.compactionAuto,
@@ -75,37 +79,46 @@ function meta(userData, resourcesRoot) {
     textLength: effective.length,
     defaultText: defaultText(resourcesRoot),
     customText: state.customText,
-    instructionsFile: paths(userData).instructions,
+    instructionsFile: target.instructions,
+    stateFile: target.state,
+    pluginEntry: engine,
+    pluginInstalled: fs.existsSync(path.join(engine, "server.mjs")),
     error: null,
   };
 }
 
+function isOpenBenchPlugin(entry) {
+  return typeof entry === "string" && entry.toLowerCase().includes("openbench-plugin");
+}
+
 /**
  * Merged config handed to the engine at spawn, or null when the feature is off.
- * `base` is the user's global opencode.json, so the override only changes the two
- * keys it owns.
+ * `base` is the user's global opencode.json, so the override only changes the keys it
+ * owns: the plugin entry and compaction.auto.
  */
-function buildConfigContent({ userData, resourcesRoot, base }) {
-  const state = load(userData);
+function buildConfigContent({ resourcesRoot, base }) {
+  const state = load();
   if (!state.enabled) return null;
 
-  const brief = text(userData, resourcesRoot);
+  const brief = text(resourcesRoot);
   if (!brief) return null;
 
-  const target = paths(userData);
+  const target = paths();
   fs.mkdirSync(target.dir, { recursive: true });
   fs.writeFileSync(target.instructions, brief, { mode: 0o600 });
+  layer.ensureEngine(resourcesRoot);
 
-  const existing = Array.isArray(base?.instructions) ? base.instructions : [];
-  const instructions = existing.includes(target.instructions)
-    ? existing
-    : [...existing, target.instructions];
+  const existing = Array.isArray(base?.plugins) ? base.plugins : [];
+  const plugins = existing.filter((entry) => !isOpenBenchPlugin(entry));
+  plugins.push(layer.pluginEntry());
 
   return {
     ...(base || {}),
-    instructions,
-    compaction: { ...((base && base.compaction) || {}), auto: state.compactionAuto },
+    plugins,
+    // The plugin compacts on idle at a budget threshold; the engine's own trigger would
+    // summarise mid-conversation and race it.
+    compaction: { ...((base && base.compaction) || {}), auto: false },
   };
 }
 
-module.exports = { load, save, meta, text, defaultText, buildConfigContent, paths };
+module.exports = { load, save, meta, text, defaultText, buildConfigContent, paths, isOpenBenchPlugin };

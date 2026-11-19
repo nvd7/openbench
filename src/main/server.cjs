@@ -149,6 +149,9 @@ class BenchServer extends EventEmitter {
     const port = this.portOverride > 0 ? this.portOverride : await freePort();
     this.baseUrl = `http://127.0.0.1:${port}`;
     const env = { ...process.env };
+    // The engine layer reads its state from this directory. It is the same path the
+    // merge installer uses, so edits made in the app reach a merged desktop install.
+    env.OPENBENCH_HOME = process.env.OPENBENCH_HOME || require("./layer.cjs").home();
     // Set by the main process before start(): merged config that the engine applies
     // over opencode.json without touching the user's file.
     delete env.OPENCODE_CONFIG_CONTENT;

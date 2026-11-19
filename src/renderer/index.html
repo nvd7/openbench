@@ -93,6 +93,9 @@
             <button class="tab" data-tab="providers" type="button">Providers</button>
             <button class="tab" data-tab="mcp" type="button">MCP</button>
             <button class="tab" data-tab="autojb" type="button">Auto-JB</button>
+            <button class="tab" data-tab="profiles" type="button">Profiles</button>
+            <button class="tab" data-tab="context" type="button">Context</button>
+            <button class="tab" data-tab="merge" type="button">Merge</button>
             <button class="tab" data-tab="maintenance" type="button">Maintenance</button>
             <button class="tab" data-tab="skills" type="button">Skills</button>
             <button class="tab" data-tab="tools" type="button">Tools</button>
@@ -191,9 +194,10 @@
               <span class="badge" id="autojb-badge">unknown</span>
             </div>
             <p class="hint">
-              A standing brief applied to every session through <code>OPENCODE_CONFIG_CONTENT</code>. Your
-              <code>opencode.json</code> is not modified — the override exists only for the engine process this app
-              spawns.
+              A standing brief injected by the engine layer on every request, so edits apply to the next turn
+              without a new session. Your <code>opencode.json</code> is not modified - the override exists only for
+              the engine process this app spawns. Use <strong>Merge</strong> to apply the same layer to an installed
+              OpenCode.
             </p>
             <label class="field">
               <span>Standing brief</span>
@@ -205,8 +209,8 @@
             <label class="field">
               <span>Automatic compaction</span>
               <select id="autojb-compaction">
-                <option value="off">Disabled — keep the full transcript</option>
-                <option value="on">Enabled — engine summarises long sessions</option>
+                <option value="off">Disabled - keep the full transcript</option>
+                <option value="on">Enabled - layer compacts at 75% of the model budget</option>
               </select>
             </label>
             <label class="field">
@@ -218,6 +222,123 @@
               <button id="autojb-reset" class="btn btn-ghost" type="button">Clear custom text</button>
             </div>
             <p class="hint" id="autojb-status"></p>
+          </section>
+
+          <section class="panel" data-panel="profiles">
+            <div class="panel-head">
+              <h3>Instruction profiles</h3>
+              <span class="badge" id="profiles-badge">unknown</span>
+            </div>
+            <p class="hint">
+              Named briefs. Bind one to a project directory, to a single session, or set it as the default. The engine
+              layer resolves session &gt; project &gt; default &gt; custom brief above.
+            </p>
+            <div class="field-row">
+              <label class="field grow">
+                <span>Profile</span>
+                <select id="profiles-select">
+                  <option value="">new profile...</option>
+                </select>
+              </label>
+              <button id="profiles-new" class="btn btn-ghost" type="button">New</button>
+              <button id="profiles-delete" class="btn btn-ghost" type="button">Delete</button>
+            </div>
+            <label class="field">
+              <span>Name</span>
+              <input id="profiles-name" type="text" maxlength="80" spellcheck="false" placeholder="e.g. review" />
+            </label>
+            <label class="field">
+              <span>Brief</span>
+              <textarea id="profiles-content" rows="12" spellcheck="false" placeholder="Instructions injected on every request for the bound scope"></textarea>
+            </label>
+            <div class="field-row button-row">
+              <button id="profiles-save" class="btn btn-primary" type="button">Save profile</button>
+              <button id="profiles-refresh" class="btn btn-ghost" type="button">Refresh</button>
+            </div>
+            <div class="panel-head">
+              <h3>Bindings</h3>
+            </div>
+            <label class="field">
+              <span>Scope</span>
+              <select id="profiles-scope">
+                <option value="default">Default (all sessions)</option>
+                <option value="project">Project directory</option>
+                <option value="session">Session id</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Directory or session</span>
+              <div class="field-row">
+                <input id="profiles-target" type="text" spellcheck="false" placeholder="C:\path\to\project or ses_..." />
+                <button id="profiles-pick" class="btn btn-ghost" type="button">Browse</button>
+              </div>
+            </label>
+            <div class="field-row button-row">
+              <button id="profiles-bind" class="btn btn-primary" type="button">Bind profile</button>
+              <button id="profiles-unbind" class="btn btn-ghost" type="button">Unbind</button>
+            </div>
+            <pre id="profiles-info" class="log">loading...</pre>
+          </section>
+
+          <section class="panel" data-panel="context">
+            <div class="panel-head">
+              <h3>Context policy</h3>
+              <span class="badge" id="context-badge">unknown</span>
+            </div>
+            <p class="hint">
+              The idle compactor fires when the last assistant message passes <code>threshold</code> of the usable
+              budget. <code>window</code> scales the model window before the threshold applies. With automatic
+              compaction off in Auto-JB, nothing compacts.
+            </p>
+            <label class="field">
+              <span>Session id</span>
+              <input id="context-session" type="text" spellcheck="false" placeholder="ses_... (leave empty for the defaults)" />
+            </label>
+            <div class="field-row">
+              <label class="field grow">
+                <span>Auto compact</span>
+                <select id="context-auto">
+                  <option value="on">Enabled</option>
+                  <option value="off">Disabled</option>
+                </select>
+              </label>
+              <label class="field grow">
+                <span>Threshold</span>
+                <select id="context-threshold"></select>
+              </label>
+              <label class="field grow">
+                <span>Window %</span>
+                <select id="context-window"></select>
+              </label>
+            </div>
+            <div class="field-row button-row">
+              <button id="context-save" class="btn btn-primary" type="button">Save policy</button>
+              <button id="context-clear" class="btn btn-ghost" type="button">Reset session</button>
+              <button id="context-load" class="btn btn-ghost" type="button">Load session</button>
+            </div>
+            <pre id="context-info" class="log">loading...</pre>
+          </section>
+
+          <section class="panel" data-panel="merge">
+            <div class="panel-head">
+              <h3>Installed OpenCode</h3>
+              <span class="badge" id="merge-badge">unknown</span>
+            </div>
+            <p class="hint">
+              Writes the engine layer into the global <code>opencode.json</code>: one <code>plugins</code> entry and
+              <code>compaction.auto = false</code>. That makes an OpenCode started outside this app behave like
+              OpenBench - same brief, same compaction policy, same local skills. A timestamped backup is taken before
+              the file is replaced, and Remove restores the previous value.
+            </p>
+            <pre id="merge-info" class="log">loading...</pre>
+            <div class="field-row button-row">
+              <button id="merge-install" class="btn btn-primary" type="button">Install layer</button>
+              <button id="merge-uninstall" class="btn btn-ghost" type="button">Remove layer</button>
+              <button id="merge-refresh" class="btn btn-ghost" type="button">Refresh</button>
+            </div>
+            <p class="hint">
+              The layer is read when an engine starts. Restart OpenCode after installing or removing it.
+            </p>
           </section>
 
           <section class="panel" data-panel="maintenance">
